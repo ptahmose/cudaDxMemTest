@@ -67,4 +67,6 @@ void CDxTextureAllocator::AllocateAndFree(int size, int count)
 		HRESULT hr = this->pDevice->CreateTexture2D(&desc, &subResData, &pD3dTexture);
 		pD3dTexture->Release();
 	}
+
+	free(pBuffer);
 }
