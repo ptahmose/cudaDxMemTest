@@ -7,6 +7,25 @@
 #include <memory>
 #include <algorithm>
 
+/*
+
+I get the following output:
+
+Before D3D11-allocations
+Total: 4294967296 bytes;  Free: 3554905292 bytes;  Used: 740062004
+After D3D11-allocations-with-immediately free
+Total: 4294967296 bytes;  Free: 2636463308 bytes;  Used: 1658503988			<-- after allocating D3D11-textures of around 2.5GB and immediately free'ing them
+After D3D11-allocations
+Total: 4294967296 bytes;  Free: 1823816908 bytes;  Used: 2471150388			<-- after allocating (and keeping) around 2.5GB of textures
+cudaMalloc of 1073741824 bytes succeeded.
+Total: 4294967296 bytes;  Free: 2454011084 bytes;  Used: 1840956212			<-- after allocating 1GB by cudaMalloc (NOTE: we have more free RAM than before...)
+cudaMalloc of 1073741824 bytes succeeded.
+Total: 4294967296 bytes;  Free: 1380269260 bytes;  Used: 2914698036
+cudaMalloc of 1073741824 bytes succeeded.
+Total: 4294967296 bytes;  Free: 265294642 bytes;  Used: 4029672654
+
+ */
+
 
 __global__ void addKernel2(int numberOfElements, int elementsPerInvocation, int *c, const int *a, const int *b)
 {
@@ -22,18 +41,29 @@ __global__ void addKernel2(int numberOfElements, int elementsPerInvocation, int 
 
 static void CudaAddTest(int numberOfInts);
 
+static void PrintMemInfo();
+
 int main()
 {
+	fprintf(stdout, "Before D3D11-allocations\n");
+	PrintMemInfo();
 	CDxTextureAllocator texture_allocator;
 	texture_allocator.Initialize();
 	texture_allocator.AllocateAndFree(1024 * 1024 * 25, 100);
+	fprintf(stdout, "After D3D11-allocations-with-immediately free\n");
+	PrintMemInfo();
 
+	texture_allocator.AllocateAndKeep(1024 * 1024 * 25, 100);
+	fprintf(stdout, "After D3D11-allocations\n");
+	PrintMemInfo();
+
+	
 	// We allocate three buffers (with the number of ints specified),
 	//  so the approx. memory consumption is n * 4 * 3.
 	//  In this case, we allocate 3 times 1 GB.
 	CudaAddTest(256 * 1024 * 1024);
-	
-    return 0;
+
+	return 0;
 }
 
 struct free_delete
@@ -58,7 +88,7 @@ static void CudaAddTest(int numberOfInts)
 	cudaError_t cudaStatus = addWithCuda(c.get(), a.get(), b.get(), ArraySize);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "addWithCuda failed!");
-		return ;
+		return;
 	}
 
 	bool isCorrect = CheckResult(c.get(), a.get(), b.get(), ArraySize);
@@ -118,6 +148,8 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 	}
 
 	fprintf(stdout, "cudaMalloc of %llu bytes succeeded.\n", size * sizeof(int));
+	PrintMemInfo();
+
 
 	cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
 	if (cudaStatus != cudaSuccess) {
@@ -126,6 +158,8 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 	}
 
 	fprintf(stdout, "cudaMalloc of %llu bytes succeeded.\n", size * sizeof(int));
+	PrintMemInfo();
+
 
 	cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
 	if (cudaStatus != cudaSuccess) {
@@ -134,6 +168,7 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 	}
 
 	fprintf(stdout, "cudaMalloc of %llu bytes succeeded.\n", size * sizeof(int));
+	PrintMemInfo();
 
 	// Copy input vectors from host memory to GPU buffers.
 	cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
@@ -196,3 +231,9 @@ void FillVector(int* v, size_t numberOfElements)
 	}
 }
 
+static void PrintMemInfo()
+{
+	size_t total, free;
+	cudaMemGetInfo(&free, &total);
+	fprintf(stdout, "Total: %llu bytes;  Free: %llu bytes;  Used: %llu\n", total, free, total - free);
+}
