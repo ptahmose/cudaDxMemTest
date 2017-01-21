@@ -40,11 +40,19 @@ __global__ void addKernel2(int numberOfElements, int elementsPerInvocation, int 
 }
 
 static void CudaAddTest(int numberOfInts);
+static void CudaAddTestUnifiedAddressing(int numberOfInts);
 
 static void PrintMemInfo();
 
 int main()
 {
+	// Choose which GPU to run on, change this on a multi-GPU system.
+	cudaError_t cudaStatus = cudaSetDevice(0);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+		return 1;
+	}
+
 	fprintf(stdout, "Before D3D11-allocations\n");
 	PrintMemInfo();
 	CDxTextureAllocator texture_allocator;
@@ -57,11 +65,20 @@ int main()
 	fprintf(stdout, "After D3D11-allocations\n");
 	PrintMemInfo();
 
-	
+
 	// We allocate three buffers (with the number of ints specified),
 	//  so the approx. memory consumption is n * 4 * 3.
 	//  In this case, we allocate 3 times 1 GB.
 	CudaAddTest(256 * 1024 * 1024);
+
+	CudaAddTestUnifiedAddressing(32 * 1024 * 1024);
+
+	// cudaDeviceReset must be called before exiting in order for profiling and
+	// tracing tools such as Nsight and Visual Profiler to show complete traces.
+	cudaStatus = cudaDeviceReset();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaDeviceReset failed!");
+	}
 
 	return 0;
 }
@@ -73,7 +90,8 @@ struct free_delete
 
 static void FillVector(int* v, size_t numberOfElements);
 static bool CheckResult(int *c, const int *a, const int *b, unsigned int size);
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
+static cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
+static cudaError_t addWithCudaUnifiedAddressing(int *c, const int *a, const int *b, unsigned int size);
 
 static void CudaAddTest(int numberOfInts)
 {
@@ -87,25 +105,45 @@ static void CudaAddTest(int numberOfInts)
 	// Add vectors in parallel.
 	cudaError_t cudaStatus = addWithCuda(c.get(), a.get(), b.get(), ArraySize);
 	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addWithCuda failed!");
+		fprintf(stderr, "addWithCuda failed!\n");
 		return;
 	}
 
 	bool isCorrect = CheckResult(c.get(), a.get(), b.get(), ArraySize);
 	if (isCorrect)
 	{
-		fprintf(stdout, "Result is correct!");
+		fprintf(stdout, "Result is correct!\n");
 	}
 	else
 	{
-		fprintf(stdout, "Result is NOT correct!");
+		fprintf(stdout, "Result is NOT correct!\n");
+	}
+}
+
+static void CudaAddTestUnifiedAddressing(int numberOfInts)
+{
+	unsigned int ArraySize = numberOfInts;// 1024 * 1024 * 256;
+	std::unique_ptr<int, free_delete> a((int*)malloc(ArraySize * sizeof(int)));
+	FillVector(a.get(), ArraySize);
+	std::unique_ptr<int, free_delete> b((int*)malloc(ArraySize * sizeof(int)));
+	FillVector(b.get(), ArraySize);
+	std::unique_ptr<int, free_delete> c((int*)malloc(ArraySize * sizeof(int)));
+
+	// Add vectors in parallel.
+	cudaError_t cudaStatus = addWithCudaUnifiedAddressing(c.get(), a.get(), b.get(), ArraySize);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "addWithCuda failed!\n");
+		return;
 	}
 
-	// cudaDeviceReset must be called before exiting in order for profiling and
-	// tracing tools such as Nsight and Visual Profiler to show complete traces.
-	cudaStatus = cudaDeviceReset();
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaDeviceReset failed!");
+	bool isCorrect = CheckResult(c.get(), a.get(), b.get(), ArraySize);
+	if (isCorrect)
+	{
+		fprintf(stdout, "Result is correct!\n");
+	}
+	else
+	{
+		fprintf(stdout, "Result is NOT correct!\n");
 	}
 }
 
@@ -133,12 +171,6 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 
 	cudaError_t cudaStatus;
 
-	// Choose which GPU to run on, change this on a multi-GPU system.
-	cudaStatus = cudaSetDevice(0);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-		goto Error;
-	}
 
 	// Allocate GPU buffers for three vectors (two input, one output)    .
 	cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
@@ -222,6 +254,83 @@ Error:
 
 	return cudaStatus;
 }
+
+cudaError_t addWithCudaUnifiedAddressing(int *c, const int *a, const int *b, unsigned int size)
+{
+	int *dev_a = 0;
+	int *dev_b = 0;
+	int *dev_c = 0;
+
+	int blockSize;
+	int n_blocks;
+	int elementsPerThread;
+
+	cudaError_t cudaStatus;
+
+	cudaStatus = cudaHostRegister(c, size * sizeof(int), cudaHostRegisterDefault);
+	cudaStatus = cudaHostRegister((int*)a, size * sizeof(int), cudaHostRegisterDefault);
+	cudaStatus = cudaHostRegister((int*)b, size * sizeof(int), cudaHostRegisterDefault);
+
+	cudaStatus = cudaHostGetDevicePointer(&dev_c, c, 0);
+	cudaStatus = cudaHostGetDevicePointer(&dev_a, (int*)a, 0);
+	cudaStatus = cudaHostGetDevicePointer(&dev_b, (int*)b, 0);
+
+	/*cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMalloc failed!");
+		goto Error;
+	}*/
+
+	blockSize = 512;
+	n_blocks = (std::min)((int)(size / blockSize + (size%blockSize == 0 ? 0 : 1)), 1024);
+	elementsPerThread = size / (blockSize*n_blocks);
+
+	addKernel2 << <n_blocks, blockSize >> > (size, (std::max)(elementsPerThread, 1), dev_c, dev_a, dev_b);
+
+	// Check for any errors launching the kernel
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		goto Error;
+	}
+
+	// cudaDeviceSynchronize waits for the kernel to finish, and returns
+	// any errors encountered during the launch.
+	cudaStatus = cudaDeviceSynchronize();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+		goto Error;
+	}
+
+	cudaPointerAttributes attributes;
+	cudaPointerGetAttributes(&attributes, dev_c);
+	if (attributes.memoryType == cudaMemoryTypeDevice)
+	{
+		// Copy output vector from GPU buffer to host memory.
+		cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
+		if (cudaStatus != cudaSuccess) {
+			fprintf(stderr, "cudaMemcpy failed!");
+			goto Error;
+		}
+	}
+
+Error:
+	cudaPointerGetAttributes(&attributes, dev_c);
+	if (attributes.memoryType == cudaMemoryTypeDevice)
+	{
+		cudaFree(dev_c);
+	}
+	else
+	{
+		cudaHostUnregister(c);
+	}
+
+	cudaHostUnregister((int*)a);
+	cudaHostUnregister((int*)b);
+
+	return cudaStatus;
+}
+
 
 void FillVector(int* v, size_t numberOfElements)
 {
