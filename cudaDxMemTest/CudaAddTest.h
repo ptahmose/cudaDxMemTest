@@ -54,16 +54,20 @@ public:
 	TestResult AddTest_DeviceMemory();
 	TestResult AddTest_HostMemory();
 	TestResult AddTest_ManagedMemory();
+	TestResult AddTest_ManagedMemory2();
 private:
 	TestResult AddTest(void(CCudaAddTest::*testMethod)(TestResultBuilder&), const char* testMethodName);
 
 	void AddTest_DeviceMemory(TestResultBuilder& result);
 	void AddTest_HostMemory(TestResultBuilder& result);
 	void AddTest_ManagedMemory(TestResultBuilder& result);
+	void AddTest_ManagedMemory2(TestResultBuilder& result);
 
 	void RunKernel(size_t numberOfElements, const int* devA, const int* devB, int* devC);
 
+	static void AddResultCorrect(TestResultBuilder& result, bool successful);
 	static void AddTotalTime(TestResultBuilder& result, const char* testMethodName, const CTimeIt& time_it);
+	static void AddTimeForOperation(TestResultBuilder& result, const CTimeIt& time_it, const std::string& operationName);
 
 	bool CheckResult(const int* ptr);
 };

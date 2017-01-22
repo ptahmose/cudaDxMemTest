@@ -45,6 +45,17 @@ static void CudaAddTestUnifiedAddressing(int numberOfInts);
 
 static void PrintMemInfo();
 
+static void PrintResult(const CCudaAddTest::TestResult& result)
+{
+	for (const std::string& msg : result.GetMessages())
+	{
+		fputs(msg.c_str(), stdout);
+		fputs("\n", stdout);
+	}
+
+	fputs("\n", stdout);
+}
+
 int main()
 {
 	// Choose which GPU to run on, change this on a multi-GPU system.
@@ -54,10 +65,25 @@ int main()
 		return 1;
 	}
 
-	CCudaAddTest addTest(1024 * 1024);
-	addTest.AddTest_DeviceMemory();
-	addTest.AddTest_HostMemory();
-	addTest.AddTest_ManagedMemory();
+	PrintMemInfo();
+
+	CCudaAddTest addTest(16*1024 * 1024);
+	auto result = addTest.AddTest_DeviceMemory();
+	PrintResult(result);
+
+	PrintMemInfo();
+
+	result = addTest.AddTest_HostMemory();
+	PrintResult(result);
+
+	PrintMemInfo();
+
+	result = addTest.AddTest_ManagedMemory();
+	PrintResult(result);
+
+	PrintMemInfo();
+	/*result = addTest.AddTest_ManagedMemory2();
+	PrintResult(result);*/
 
 
 	fprintf(stdout, "Before D3D11-allocations\n");
@@ -378,5 +404,5 @@ static void PrintMemInfo()
 {
 	size_t total, free;
 	cudaMemGetInfo(&free, &total);
-	fprintf(stdout, "Total: %llu bytes;  Free: %llu bytes;  Used: %llu\n", total, free, total - free);
+	fprintf(stdout, "Total: %llu bytes;  Free: %llu bytes;  Used: %llu\n\n", total, free, total - free);
 }
