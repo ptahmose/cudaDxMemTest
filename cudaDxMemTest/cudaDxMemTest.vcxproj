@@ -159,10 +159,13 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="CudaAddTest.h" />
     <ClInclude Include="cudaHelper.h" />
     <ClInclude Include="DxTextureAllocator.h" />
+    <ClInclude Include="optionparser.h" />
+    <ClInclude Include="options.h" />
     <ClInclude Include="timeit.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DxTextureAllocator.cpp" />
+    <ClCompile Include="options.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
