@@ -152,10 +152,14 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <CudaCompile Include="CudaAddTest.cu" />
     <CudaCompile Include="kernel.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CudaAddTest.h" />
+    <ClInclude Include="cudaHelper.h" />
     <ClInclude Include="DxTextureAllocator.h" />
+    <ClInclude Include="timeit.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DxTextureAllocator.cpp" />

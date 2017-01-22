@@ -6,6 +6,7 @@
 #include "DxTextureAllocator.h"
 #include <memory>
 #include <algorithm>
+#include "CudaAddTest.h"
 
 /*
 
@@ -52,6 +53,12 @@ int main()
 		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
 		return 1;
 	}
+
+	CCudaAddTest addTest(1024 * 1024);
+	addTest.AddTest_DeviceMemory();
+	addTest.AddTest_HostMemory();
+	addTest.AddTest_ManagedMemory();
+
 
 	fprintf(stdout, "Before D3D11-allocations\n");
 	PrintMemInfo();
@@ -132,7 +139,34 @@ static void CudaAddTestUnifiedAddressing(int numberOfInts)
 	// Add vectors in parallel.
 	cudaError_t cudaStatus = addWithCudaUnifiedAddressing(c.get(), a.get(), b.get(), ArraySize);
 	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addWithCuda failed!\n");
+		fprintf(stderr, "addWithCudaUnifiedAddressing failed!\n");
+		return;
+	}
+
+	bool isCorrect = CheckResult(c.get(), a.get(), b.get(), ArraySize);
+	if (isCorrect)
+	{
+		fprintf(stdout, "Result is correct!\n");
+	}
+	else
+	{
+		fprintf(stdout, "Result is NOT correct!\n");
+	}
+}
+
+static void CudaAddTestUnifiedAddressing2(int numberOfInts)
+{
+	unsigned int ArraySize = numberOfInts;// 1024 * 1024 * 256;
+	std::unique_ptr<int, free_delete> a((int*)malloc(ArraySize * sizeof(int)));
+	FillVector(a.get(), ArraySize);
+	std::unique_ptr<int, free_delete> b((int*)malloc(ArraySize * sizeof(int)));
+	FillVector(b.get(), ArraySize);
+	std::unique_ptr<int, free_delete> c((int*)malloc(ArraySize * sizeof(int)));
+
+	// Add vectors in parallel.
+	cudaError_t cudaStatus = addWithCudaUnifiedAddressing(c.get(), a.get(), b.get(), ArraySize);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "addWithCudaUnifiedAddressing failed!\n");
 		return;
 	}
 
