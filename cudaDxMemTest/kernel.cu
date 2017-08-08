@@ -7,6 +7,7 @@
 #include <memory>
 #include <algorithm>
 #include "CudaAddTest.h"
+#include "options.h"
 
 /*
 
@@ -55,9 +56,12 @@ static void PrintResult(const CCudaAddTest::TestResult& result)
 
 	fputs("\n", stdout);
 }
-
-int main()
+#if 0
+int main(int argc,char** argv)
 {
+	COptions options;
+	options.ParseCommandLine(argc-1, argv+1);
+
 	// Choose which GPU to run on, change this on a multi-GPU system.
 	cudaError_t cudaStatus = cudaSetDevice(0);
 	if (cudaStatus != cudaSuccess) {
@@ -115,7 +119,7 @@ int main()
 
 	return 0;
 }
-
+#endif
 struct free_delete
 {
 	void operator()(void* x) { free(x); }
